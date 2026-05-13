@@ -1,0 +1,56 @@
+alias: Rientro casa - Disinserisci allarme
+description: >
+  Quando Emanuele entra nella zona casa e l'iPhone è connesso al WiFi di casa,
+  disinserisce l'allarme e invia notifica di conferma.
+triggers:
+  - entity_id: person.emanuele_frisella
+    from: not_home
+    to: home
+    id: persona_rientro
+    trigger: state
+  - entity_id: device_tracker.iphone_emanuele
+    from: not_home
+    to: home
+    id: tracker_rientro
+    trigger: state
+conditions:
+  - condition: state
+    entity_id: device_tracker.iphone_emanuele
+    state: home
+    for:
+      seconds: 0
+  - condition: state
+    entity_id: alarm_control_panel.econnect_metronet_casa
+    state:
+      - armed_away
+      - armed_home
+      - armed_night
+      - armed_vacation
+actions:
+  - alias: Disinserisci allarme
+    target:
+      entity_id: alarm_control_panel.econnect_metronet_casa
+    data:
+      code: "171119"
+    action: alarm_control_panel.alarm_disarm
+  - alias: Attendi conferma disinserimento
+    wait_template: >
+      {{ is_state('alarm_control_panel.econnect_metronet_casa', 'disarmed') }}
+    timeout:
+      seconds: 15
+    continue_on_timeout: true
+  - alias: Notifica conferma
+    data:
+      title: "✅ Bentornato a casa"
+      message: >
+        {% if is_state('alarm_control_panel.econnect_metronet_casa', 'disarmed') %}
+        Allarme disinserito alle {{ now().strftime('%H:%M') }}.
+        {% else %}
+        ⚠️ Disinserimento allarme non confermato entro 15s.
+        {% endif %}
+      data:
+        tag: rientro_casa
+        push:
+          interruption-level: time-sensitive
+    action: notify.mobile_app_iphone_di_emanuele
+mode: restart
