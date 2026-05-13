@@ -1,56 +1,59 @@
 alias: Rientro casa - Disinserisci allarme
 description: >
-  Quando Emanuele entra nella zona casa e l'iPhone è connesso al WiFi di casa,
-  disinserisce l'allarme e invia notifica di conferma.
+  Disinserisce l'allarme quando Emanuele rientra: deve essere sia dentro la
+  zona "home" (person) sia connesso al WiFi di casa (device_tracker Ubiquiti).
+  Entrambe le condizioni devono essere vere.
 triggers:
-  - entity_id: person.emanuele_frisella
-    from: not_home
+  - trigger: state
+    entity_id: person.emanuele_frisella
     to: home
-    id: persona_rientro
-    trigger: state
-  - entity_id: device_tracker.iphone_emanuele
-    from: not_home
+    id: persona_home
+  - trigger: state
+    entity_id: device_tracker.iphone_emanuele
     to: home
-    id: tracker_rientro
-    trigger: state
+    id: wifi_home
 conditions:
+  - condition: state
+    entity_id: person.emanuele_frisella
+    state: home
   - condition: state
     entity_id: device_tracker.iphone_emanuele
     state: home
-    for:
-      seconds: 0
-  - condition: state
-    entity_id: alarm_control_panel.econnect_metronet_casa
-    state:
-      - armed_away
-      - armed_home
-      - armed_night
-      - armed_vacation
+  - condition: not
+    conditions:
+      - condition: state
+        entity_id: alarm_control_panel.econnect_metronet_casa
+        state: disarmed
 actions:
   - alias: Disinserisci allarme
+    action: alarm_control_panel.alarm_disarm
     target:
       entity_id: alarm_control_panel.econnect_metronet_casa
     data:
       code: "171119"
-    action: alarm_control_panel.alarm_disarm
   - alias: Attendi conferma disinserimento
-    wait_template: >
-      {{ is_state('alarm_control_panel.econnect_metronet_casa', 'disarmed') }}
+    wait_template: "{{ is_state('alarm_control_panel.econnect_metronet_casa', 'disarmed') }}"
     timeout:
       seconds: 15
     continue_on_timeout: true
-  - alias: Notifica conferma
+  - alias: Notifica esito
+    action: notify.mobile_app_iphone_di_emanuele
     data:
-      title: "✅ Bentornato a casa"
+      title: >
+        {% if is_state('alarm_control_panel.econnect_metronet_casa', 'disarmed') %}
+        ✅ Bentornato a casa
+        {% else %}
+        ⚠️ Allarme non disinserito
+        {% endif %}
       message: >
         {% if is_state('alarm_control_panel.econnect_metronet_casa', 'disarmed') %}
         Allarme disinserito alle {{ now().strftime('%H:%M') }}.
         {% else %}
-        ⚠️ Disinserimento allarme non confermato entro 15s.
+        Il disinserimento non è stato confermato entro 15 secondi.
         {% endif %}
       data:
         tag: rientro_casa
         push:
           interruption-level: time-sensitive
-    action: notify.mobile_app_iphone_di_emanuele
-mode: restart
+mode: single
+max_exceeded: silent
